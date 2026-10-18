@@ -1,2 +1,10 @@
-# motion
-Motion — a shared block studio. BlockNote editor, Neon Postgres, deployed on Vercel.
+# Motion
+
+A shared writing studio. Pages, nested in a sidebar, edited as blocks, and moved across idea, draft, and live.
+
+- **Editor:** [BlockNote](https://www.blocknotejs.org) (slash menu, drag handles, code blocks)
+- **Database:** Neon Postgres, with a local Postgres fallback in preview
+- **Host:** Vercel
+- **Source:** GitHub
+
+The studio is shared. There are no accounts. Do not store private notes in it.
