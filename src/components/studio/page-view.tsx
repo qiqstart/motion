@@ -2,10 +2,12 @@ import * as Dialog from "@radix-ui/react-dialog";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import * as Popover from "@radix-ui/react-popover";
 import { Link } from "@tanstack/react-router";
-import { Check, MoreHorizontal, Star } from "lucide-react";
+import { Check, MoreHorizontal, Plus, Star, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import { AskMotion } from "@/components/studio/ask-motion";
 import { EditorHost } from "@/components/studio/editor-host";
 import { PageIcon } from "@/components/studio/icons";
+import { PresentMode } from "@/components/studio/present";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/cn";
 import {
@@ -15,15 +17,18 @@ import {
   countWords,
   formatEdited,
   ICONS,
+  paragraphsFromText,
   STATUSES,
   statusLabel,
   type CoverName,
   type IconName,
   type PageDetail,
   type PagePatch,
+  type PageProperty,
   type PageSummary,
   type StatusName,
 } from "@/lib/pages";
+import type { AiPlan } from "@/lib/ai.functions";
 
 const COVERS_CLASS: Record<CoverName, string> = {
   none: "",
@@ -38,7 +43,12 @@ export function PageView({
   busy,
   onPatch,
   onCreateSubpage,
+  onCreateInline,
+  onOpenPage,
   onDuplicate,
+  onSaveTemplate,
+  onUseTemplate,
+  onDraftSubpage,
   onDelete,
 }: {
   page: PageDetail;
@@ -46,19 +56,28 @@ export function PageView({
   busy: boolean;
   onPatch: (patch: PagePatch, silent?: boolean) => Promise<void>;
   onCreateSubpage: () => void;
+  onCreateInline: () => Promise<{ id: string; title: string }>;
+  onOpenPage: (id: string) => void;
   onDuplicate: () => void;
+  onSaveTemplate: () => void;
+  onUseTemplate: () => void;
+  onDraftSubpage: (title: string, text: string) => Promise<void>;
   onDelete: () => void;
 }) {
   const blocks = asBlocks(page.content);
   const [title, setTitle] = useState(page.title);
+  const [properties, setProperties] = useState(page.properties);
+  const [presenting, setPresenting] = useState(false);
   const [words, setWords] = useState(() => countWords(blocks));
   const [saveState, setSaveState] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const [confirmDelete, setConfirmDelete] = useState(false);
   const titleRef = useRef<HTMLTextAreaElement>(null);
   const contentTimer = useRef<number | null>(null);
   const titleTimer = useRef<number | null>(null);
+  const propertyTimer = useRef<number | null>(null);
   const pendingContent = useRef<unknown[] | null>(null);
   const pendingTitle = useRef<string | null>(null);
+  const pendingProperties = useRef<PageProperty[] | null>(null);
   const failedContent = useRef<unknown[] | null>(null);
   const onPatchRef = useRef(onPatch);
   onPatchRef.current = onPatch;
@@ -75,11 +94,15 @@ export function PageView({
     return () => {
       if (contentTimer.current) window.clearTimeout(contentTimer.current);
       if (titleTimer.current) window.clearTimeout(titleTimer.current);
+      if (propertyTimer.current) window.clearTimeout(propertyTimer.current);
       const content = pendingContent.current;
       const nextTitle = pendingTitle.current;
+      const nextProperties = pendingProperties.current;
       pendingContent.current = null;
       pendingTitle.current = null;
+      pendingProperties.current = null;
       if (nextTitle !== null) void onPatchRef.current({ title: nextTitle });
+      if (nextProperties) void onPatchRef.current({ properties: nextProperties }, true);
       if (content) void onPatchRef.current({ content }, true);
     };
   }, []);
@@ -119,6 +142,36 @@ export function PageView({
     }, 650);
   }
 
+  function queueProperties(next: PageProperty[]) {
+    setProperties(next);
+    pendingProperties.current = next;
+    if (propertyTimer.current) window.clearTimeout(propertyTimer.current);
+    propertyTimer.current = window.setTimeout(() => {
+      const value = pendingProperties.current;
+      pendingProperties.current = null;
+      if (!value) return;
+      setSaveState("saving");
+      void onPatchRef
+        .current({ properties: value }, true)
+        .then(() => setSaveState("saved"))
+        .catch(() => setSaveState("error"));
+    }, 500);
+  }
+
+  async function applyPlan(plan: AiPlan) {
+    if (plan.op === "append" && plan.text) {
+      await onPatch({ content: [...blocks, ...paragraphsFromText(plan.text)] }, true);
+    } else if (plan.op === "replace_title" && plan.title) {
+      setTitle(plan.title);
+      await onPatch({ title: plan.title });
+    } else if (plan.op === "set_status" && plan.status) {
+      await onPatch({ status: plan.status });
+    } else if (plan.op === "new_page") {
+      await onDraftSubpage(plan.title || "Untitled", plan.text);
+    }
+  }
+
+  const titles = Object.fromEntries(pages.map((item) => [item.id, item.title]));
   const cover = page.cover in COVERS_CLASS ? (page.cover as CoverName) : "none";
 
   return (
@@ -188,6 +241,7 @@ export function PageView({
           </div>
           <p className="text-sm text-muted tabular-nums">{words} words</p>
           <p className="text-sm text-muted">{saveLabel(saveState, page.updatedAt)}</p>
+          {page.template ? <p className="text-sm text-copper-deep">Template</p> : null}
           {saveState === "error" ? (
             <button
               type="button"
@@ -208,6 +262,13 @@ export function PageView({
             </button>
           ) : null}
           <div className="ml-auto flex items-center">
+            <Button onClick={() => setPresenting(true)}>Present</Button>
+            <AskMotion pageId={page.id} busy={busy} onApply={applyPlan} />
+            {page.template ? (
+              <Button variant="primary" disabled={busy} onClick={onUseTemplate}>
+                Use
+              </Button>
+            ) : null}
             <Button
               size="icon"
               aria-pressed={page.favorite}
@@ -231,6 +292,7 @@ export function PageView({
                 >
                   <MenuItem onSelect={onCreateSubpage}>New subpage</MenuItem>
                   <MenuItem onSelect={onDuplicate}>Duplicate</MenuItem>
+                  {page.template ? null : <MenuItem onSelect={onSaveTemplate}>Save as template</MenuItem>}
                   <MenuItem onSelect={() => setConfirmDelete(true)}>Delete</MenuItem>
                 </DropdownMenu.Content>
               </DropdownMenu.Portal>
@@ -238,9 +300,38 @@ export function PageView({
           </div>
         </div>
 
+        <PropertiesEditor properties={properties} disabled={busy} onChange={queueProperties} />
+
         <div className="mt-6">
-          <EditorHost pageId={page.id} content={blocks} onDocument={queueContent} />
+          <EditorHost
+            pageId={page.id}
+            content={blocks}
+            titles={titles}
+            onDocument={queueContent}
+            onOpenPage={onOpenPage}
+            onCreateSubpage={onCreateInline}
+          />
         </div>
+
+        {page.backlinks.length ? (
+          <section className="mt-10 border-t border-line pt-4">
+            <h2 className="text-xs tracking-wide text-muted">Backlinks</h2>
+            <ul className="mt-2">
+              {page.backlinks.map((link) => (
+                <li key={link.id}>
+                  <Link
+                    to="/"
+                    search={{ page: link.id, view: "page" }}
+                    className="flex h-11 items-center gap-2 rounded-md px-2 text-sm hover:bg-paper-2"
+                  >
+                    <PageIcon name={link.icon} />
+                    <span className="truncate">{link.title}</span>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </section>
+        ) : null}
       </div>
 
       <Dialog.Root open={confirmDelete} onOpenChange={setConfirmDelete}>
@@ -269,7 +360,74 @@ export function PageView({
           </Dialog.Content>
         </Dialog.Portal>
       </Dialog.Root>
+      {presenting ? <PresentMode page={page} blocks={blocks} onClose={() => setPresenting(false)} /> : null}
     </article>
+  );
+}
+
+function PropertiesEditor({
+  properties,
+  disabled,
+  onChange,
+}: {
+  properties: PageProperty[];
+  disabled: boolean;
+  onChange: (next: PageProperty[]) => void;
+}) {
+  return (
+    <section className="mt-4">
+      <div className="flex items-center justify-between">
+        <h2 className="text-xs tracking-wide text-muted">Properties</h2>
+        <button
+          type="button"
+          className="inline-flex h-11 items-center gap-1 px-2 text-sm text-muted"
+          disabled={disabled || properties.length >= 16}
+          onClick={() => onChange([...properties, { id: crypto.randomUUID(), name: "Label", value: "" }])}
+        >
+          <Plus className="size-4" />
+          Add
+        </button>
+      </div>
+      {properties.length ? (
+        <ul className="mt-1">
+          {properties.map((property) => (
+            <li key={property.id} className="grid grid-cols-[minmax(0,8rem)_minmax(0,1fr)_2.75rem] items-center gap-2">
+              <input
+                aria-label="Property name"
+                value={property.name}
+                disabled={disabled}
+                onChange={(event) =>
+                  onChange(properties.map((item) => (item.id === property.id ? { ...item, name: event.target.value } : item)))
+                }
+                className="h-11 rounded-md border border-transparent bg-transparent px-2 text-sm outline-none focus-visible:border-line"
+              />
+              <input
+                aria-label={`${property.name} value`}
+                value={property.value}
+                disabled={disabled}
+                placeholder="Empty"
+                onChange={(event) =>
+                  onChange(
+                    properties.map((item) => (item.id === property.id ? { ...item, value: event.target.value } : item)),
+                  )
+                }
+                className="h-11 rounded-md border border-transparent bg-transparent px-2 text-sm outline-none focus-visible:border-line"
+              />
+              <button
+                type="button"
+                aria-label={`Remove ${property.name}`}
+                className="grid size-11 place-items-center text-muted"
+                onClick={() => onChange(properties.filter((item) => item.id !== property.id))}
+              >
+                <X className="size-4" />
+              </button>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="px-2 text-sm text-muted">No custom properties yet.</p>
+      )}
+    </section>
   );
 }
 

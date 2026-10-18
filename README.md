@@ -7,4 +7,4 @@ A shared writing studio. Pages, nested in a sidebar, edited as blocks, and moved
 - **Host:** Vercel
 - **Source:** GitHub
 
-The studio is shared. There are no accounts. Do not store private notes in it.
+The studio is private to the signed-in account. Sign in with Google or X.

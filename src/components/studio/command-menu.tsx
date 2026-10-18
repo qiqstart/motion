@@ -26,7 +26,7 @@ export function CommandMenu({
       contentClassName="fixed inset-x-4 top-24 z-50 mx-auto max-w-xl overflow-hidden rounded-lg border border-line bg-paper"
     >
       <Command.Input
-        placeholder="Jump to a page, or create one"
+        placeholder="Search titles and page text"
         className="h-12 w-full border-b border-line bg-transparent px-4 text-base outline-none placeholder:text-faint"
       />
       <Command.List className="max-h-80 overflow-y-auto p-1">
@@ -57,7 +57,7 @@ export function CommandMenu({
           {pages.map((page) => (
             <Command.Item
               key={page.id}
-              value={`${page.title} ${page.id}`}
+              value={`${page.title} ${page.searchText} ${page.id}`}
               onSelect={() => {
                 onOpenChange(false);
                 onOpenPage(page.id);

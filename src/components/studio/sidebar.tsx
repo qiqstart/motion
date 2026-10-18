@@ -1,14 +1,15 @@
 import { Link } from "@tanstack/react-router";
-import { ChevronRight, Plus, Search, X } from "lucide-react";
+import { ChevronRight, GripVertical, Plus, Search, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { PageIcon } from "@/components/studio/icons";
+import { UserButton } from "@/lib/auth/gates";
 import { cn } from "@/lib/cn";
 import type { PageSummary } from "@/lib/pages";
 
 const SOURCE_URL = "https://github.com/qiqstart/motion";
-
 const PADS = ["pl-1", "pl-4", "pl-8", "pl-10", "pl-12"] as const;
+type Place = "before" | "after" | "inside";
 
 export function Sidebar({
   pages,
@@ -17,6 +18,8 @@ export function Sidebar({
   open,
   onClose,
   onCreate,
+  onMove,
+  onUseTemplate,
   busy,
 }: {
   pages: PageSummary[];
@@ -25,11 +28,15 @@ export function Sidebar({
   open: boolean;
   onClose: () => void;
   onCreate: () => void;
+  onMove: (id: string, targetId: string, place: Place) => void;
+  onUseTemplate: (id: string) => void;
   busy: boolean;
 }) {
   const [query, setQuery] = useState("");
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
   const [wide, setWide] = useState(true);
+  const [dragId, setDragId] = useState<string | null>(null);
+  const [over, setOver] = useState<{ id: string; place: Place } | null>(null);
   useEffect(() => {
     const media = window.matchMedia("(min-width: 1024px)");
     const sync = () => setWide(media.matches);
@@ -38,16 +45,20 @@ export function Sidebar({
     return () => media.removeEventListener("change", sync);
   }, []);
   const needle = query.trim().toLowerCase();
-  const favorites = pages.filter((page) => page.favorite);
-  const matches = useMemo(
-    () =>
-      needle
-        ? pages.filter((page) => page.title.toLowerCase().includes(needle))
-        : [],
-    [needle, pages],
-  );
+  const documents = pages.filter((page) => !page.template);
+  const templates = pages.filter((page) => page.template);
+  const favorites = documents.filter((page) => page.favorite);
+  const matches = useMemo(() => {
+    if (!needle) return [];
+    return pages.flatMap((page) => {
+      const title = page.title.toLowerCase().includes(needle);
+      const body = page.searchText.toLowerCase().includes(needle);
+      if (!title && !body) return [];
+      return [{ page, inText: !title && body }];
+    });
+  }, [needle, pages]);
   const childrenOf = (parentId: string | null) =>
-    pages
+    documents
       .filter((page) => page.parentId === parentId)
       .sort((a, b) => a.position - b.position || a.title.localeCompare(b.title));
 
@@ -55,9 +66,54 @@ export function Sidebar({
     return childrenOf(parentId).map((page) => {
       const children = childrenOf(page.id);
       const isOpen = collapsed[page.id] !== true;
+      const mark = over?.id === page.id ? over.place : null;
       return (
         <div key={page.id}>
-          <div className={cn("flex items-center", PADS[Math.min(depth, PADS.length - 1)])}>
+          <div
+            className={cn(
+              "flex items-center rounded-md",
+              PADS[Math.min(depth, PADS.length - 1)],
+              mark === "inside" && "bg-walnut-2",
+              mark === "before" && "border-t-2 border-copper",
+              mark === "after" && "border-b-2 border-copper",
+              dragId === page.id && "opacity-50",
+            )}
+            onDragOver={(event) => {
+              if (!event.dataTransfer.types.includes("application/x-motion-page")) return;
+              event.preventDefault();
+              const rect = event.currentTarget.getBoundingClientRect();
+              const ratio = (event.clientY - rect.top) / rect.height;
+              const place: Place = ratio < 0.28 ? "before" : ratio > 0.72 ? "after" : "inside";
+              setOver({ id: page.id, place });
+            }}
+            onDrop={(event) => {
+              const id = event.dataTransfer.getData("application/x-motion-page");
+              event.preventDefault();
+              const rect = event.currentTarget.getBoundingClientRect();
+              const ratio = (event.clientY - rect.top) / Math.max(rect.height, 1);
+              const place: Place = ratio < 0.28 ? "before" : ratio > 0.72 ? "after" : "inside";
+              if (id) onMove(id, page.id, place);
+              setDragId(null);
+              setOver(null);
+            }}
+          >
+            <button
+              type="button"
+              draggable
+              aria-label={`Move ${page.title}`}
+              className="grid h-11 w-8 shrink-0 cursor-grab place-items-center text-walnut-muted active:cursor-grabbing"
+              onDragStart={(event) => {
+                event.dataTransfer.setData("application/x-motion-page", page.id);
+                event.dataTransfer.effectAllowed = "move";
+                setDragId(page.id);
+              }}
+              onDragEnd={() => {
+                setDragId(null);
+                setOver(null);
+              }}
+            >
+              <GripVertical className="size-4" />
+            </button>
             {children.length ? (
               <button
                 type="button"
@@ -113,7 +169,7 @@ export function Sidebar({
             <input
               value={query}
               onChange={(event) => setQuery(event.target.value)}
-              placeholder="Search pages"
+              placeholder="Search pages and text"
               className="h-11 w-full rounded-md border border-walnut-line bg-walnut-2 pr-3 pl-9 text-sm text-paper outline-none placeholder:text-walnut-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-copper"
             />
           </label>
@@ -128,14 +184,16 @@ export function Sidebar({
             <div className="px-1">
               <p className="px-2 pb-1 text-xs tracking-wide text-walnut-muted">Matches</p>
               {matches.length ? (
-                matches.map((page) => (
-                  <PageLink
-                    key={page.id}
-                    page={page}
-                    active={view === "page" && activeId === page.id}
-                    onNavigate={onClose}
-                    padded
-                  />
+                matches.map(({ page, inText }) => (
+                  <div key={page.id}>
+                    <PageLink
+                      page={page}
+                      active={view === "page" && activeId === page.id}
+                      onNavigate={onClose}
+                      padded
+                    />
+                    {inText ? <p className="px-3 pb-1 text-xs text-walnut-muted">In the page text</p> : null}
+                  </div>
                 ))
               ) : (
                 <p className="px-3 py-2 text-sm text-walnut-muted">No pages match.</p>
@@ -158,12 +216,32 @@ export function Sidebar({
                 </div>
               ) : null}
               <p className="px-3 pb-1 text-xs tracking-wide text-walnut-muted">Pages</p>
-              {pages.length ? renderBranch(null, 0) : <p className="px-3 py-2 text-sm text-walnut-muted">No pages yet.</p>}
+              {documents.length ? renderBranch(null, 0) : <p className="px-3 py-2 text-sm text-walnut-muted">No pages yet.</p>}
+              {templates.length ? (
+                <div className="mt-4">
+                  <p className="px-3 pb-1 text-xs tracking-wide text-walnut-muted">Templates</p>
+                  {templates.map((page) => (
+                    <div key={page.id} className="flex items-center">
+                      <PageLink page={page} active={view === "page" && activeId === page.id} onNavigate={onClose} padded />
+                      <button
+                        type="button"
+                        className="h-11 shrink-0 px-2 text-xs text-walnut-muted"
+                        onClick={() => onUseTemplate(page.id)}
+                      >
+                        Use
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              ) : null}
             </>
           )}
         </nav>
 
         <div className="border-t border-walnut-line px-3 py-3">
+          <div className="motion-account mb-3 min-w-0 px-1">
+            <UserButton />
+          </div>
           <div className="grid grid-cols-2 gap-1 rounded-md bg-walnut-2 p-1">
             <Link
               to="/"
@@ -189,7 +267,7 @@ export function Sidebar({
             </Link>
           </div>
           <p className="mt-3 px-1 text-xs leading-relaxed text-pretty text-walnut-muted">
-            Shared studio. Pages are visible to anyone who opens Motion.{" "}
+            Pages stay on your account.{" "}
             <a
               href={SOURCE_URL}
               target="_blank"

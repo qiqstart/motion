@@ -35,11 +35,17 @@ class EditorBoundary extends Component<{ children: ReactNode; onReset: () => voi
 export function EditorHost({
   pageId,
   content,
+  titles,
   onDocument,
+  onOpenPage,
+  onCreateSubpage,
 }: {
   pageId: string;
   content: unknown[];
+  titles: Record<string, string>;
   onDocument: (blocks: unknown[]) => void;
+  onOpenPage: (id: string) => void;
+  onCreateSubpage: () => Promise<{ id: string; title: string }>;
 }) {
   const [attempt, setAttempt] = useState(0);
 
@@ -57,7 +63,10 @@ export function EditorHost({
             key={`${pageId}-${attempt}`}
             pageId={pageId}
             content={attempt === 0 ? content : []}
+            titles={titles}
             onDocument={onDocument}
+            onOpenPage={onOpenPage}
+            onCreateSubpage={onCreateSubpage}
           />
         </Suspense>
       </ClientOnly>

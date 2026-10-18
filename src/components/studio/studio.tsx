@@ -7,8 +7,8 @@ import { PageView } from "@/components/studio/page-view";
 import { Sidebar } from "@/components/studio/sidebar";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/cn";
-import { createPage, deletePage, duplicatePage, updatePage } from "@/lib/pages.functions";
-import type { PagePatch, StudioData } from "@/lib/pages";
+import { createFromTemplate, createPage, deletePage, duplicatePage, movePage, saveTemplate, updatePage } from "@/lib/pages.functions";
+import { isDescendant, paragraphsFromText, type PagePatch, type StudioData } from "@/lib/pages";
 
 export function Studio({ data, view }: { data: StudioData; view: "page" | "board" }) {
   const navigate = useNavigate();
@@ -66,6 +66,41 @@ export function Studio({ data, view }: { data: StudioData; view: "page" | "board
     });
   }
 
+  function relocate(id: string, targetId: string, place: "before" | "after" | "inside") {
+    const documents = data.pages.filter((page) => !page.template);
+    const target = documents.find((page) => page.id === targetId);
+    if (!target || id === targetId || isDescendant(documents, id, targetId)) return;
+    const parentId = place === "inside" ? target.id : target.parentId;
+    const siblings = documents
+      .filter((page) => page.parentId === parentId && page.id !== id)
+      .sort((a, b) => a.position - b.position || a.title.localeCompare(b.title));
+    const index =
+      place === "inside"
+        ? siblings.length
+        : Math.max(0, siblings.findIndex((page) => page.id === target.id) + (place === "after" ? 1 : 0));
+    void run(async () => {
+      await movePage({ data: { id, parentId, index } });
+      await router.invalidate();
+    });
+  }
+
+  async function createInline() {
+    if (!data.page) return { id: "", title: "Untitled" };
+    const created = await createPage({ data: { parentId: data.page.id, title: "Untitled" } });
+    await router.invalidate();
+    return created;
+  }
+
+  async function draftSubpage(title: string, text: string) {
+    if (!data.page) return;
+    await run(async () => {
+      const created = await createPage({ data: { parentId: data.page?.id ?? null, title } });
+      const content = paragraphsFromText(text);
+      if (content.length) await updatePage({ data: { id: created.id, content } });
+      await navigate({ to: "/", search: { page: created.id, view: "page" } });
+    });
+  }
+
   async function patch(id: string, next: PagePatch, silent?: boolean) {
     await updatePage({ data: { id, ...next } });
     if (!silent) await router.invalidate();
@@ -80,6 +115,14 @@ export function Studio({ data, view }: { data: StudioData; view: "page" | "board
         open={navOpen}
         onClose={() => setNavOpen(false)}
         onCreate={() => makePage(null)}
+        onMove={relocate}
+        onUseTemplate={(id) => {
+          void run(async () => {
+            const created = await createFromTemplate({ data: { id, parentId: null } });
+            setNavOpen(false);
+            await navigate({ to: "/", search: { page: created.id, view: "page" } });
+          });
+        }}
         busy={busy}
       />
       <div className="flex min-w-0 flex-1 flex-col">
@@ -105,7 +148,7 @@ export function Studio({ data, view }: { data: StudioData; view: "page" | "board
           ) : null}
           {view === "board" ? (
             <Board
-              pages={data.pages}
+              pages={data.pages.filter((page) => !page.template)}
               busy={busy}
               onOpen={openPage}
               onStatus={(id, status) => {
@@ -122,6 +165,8 @@ export function Studio({ data, view }: { data: StudioData; view: "page" | "board
               busy={busy}
               onPatch={(next, silent) => patch(data.page!.id, next, silent)}
               onCreateSubpage={() => makePage(data.page?.id)}
+              onCreateInline={createInline}
+              onOpenPage={openPage}
               onDuplicate={() => {
                 const id = data.page?.id;
                 if (!id) return;
@@ -130,6 +175,23 @@ export function Studio({ data, view }: { data: StudioData; view: "page" | "board
                   await navigate({ to: "/", search: { page: copy.id, view: "page" } });
                 });
               }}
+              onSaveTemplate={() => {
+                const id = data.page?.id;
+                if (!id) return;
+                void run(async () => {
+                  await saveTemplate({ data: { id } });
+                  await router.invalidate();
+                });
+              }}
+              onUseTemplate={() => {
+                const id = data.page?.id;
+                if (!id) return;
+                void run(async () => {
+                  const created = await createFromTemplate({ data: { id, parentId: null } });
+                  await navigate({ to: "/", search: { page: created.id, view: "page" } });
+                });
+              }}
+              onDraftSubpage={draftSubpage}
               onDelete={() => {
                 const id = data.page?.id;
                 if (!id) return;
@@ -196,7 +258,7 @@ export function StudioPending() {
   return (
     <div className="flex h-dvh bg-paper text-ink">
       <div className="hidden w-72 bg-walnut lg:block" />
-      <div className="flex-1 px-8 pt-16">
+      <div className="flex min-w-0 flex-1 flex-col px-6 pt-16 sm:px-8">
         <div className="h-10 w-64 rounded-md bg-paper-2" />
         <div className="mt-8 h-4 w-96 max-w-full rounded-sm bg-paper-2" />
         <div className="mt-3 h-4 w-80 max-w-full rounded-sm bg-paper-2" />
