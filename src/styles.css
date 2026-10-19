@@ -35,6 +35,18 @@
   }
 }
 
+:root {
+  --feedback-accent: var(--color-copper);
+  --feedback-accent-text: var(--color-paper);
+  --feedback-bg: var(--color-paper);
+  --feedback-text: var(--color-ink);
+  --feedback-muted: var(--color-muted);
+  --feedback-border: var(--color-line);
+  --feedback-field-bg: var(--color-paper-3);
+  --feedback-radius: var(--radius-md);
+  --feedback-font: var(--font-sans);
+}
+
 html,
 body {
   margin: 0;
