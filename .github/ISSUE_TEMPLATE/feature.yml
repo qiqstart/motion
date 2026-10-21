@@ -1,0 +1,20 @@
+name: Feature
+description: A new feature or improvement
+title: "feat: "
+labels: [feature]
+body:
+  - type: textarea
+    id: goal
+    attributes: {label: Goal, description: What should this achieve, and for whom?}
+    validations: {required: true}
+  - type: textarea
+    id: details
+    attributes: {label: Details, description: "Proposed behaviour and context. Quote the source (e.g. feedback id + date)."}
+    validations: {required: true}
+  - type: textarea
+    id: acceptance
+    attributes: {label: Acceptance criteria, placeholder: "- [ ] ..."}
+    validations: {required: true}
+  - type: textarea
+    id: out_of_scope
+    attributes: {label: Out of scope}

@@ -1,0 +1,20 @@
+name: Bug
+description: Something is broken
+title: "fix: "
+labels: [bug]
+body:
+  - type: textarea
+    id: goal
+    attributes: {label: Goal, description: What should work?}
+    validations: {required: true}
+  - type: textarea
+    id: details
+    attributes: {label: Details, description: "Steps to reproduce, expected vs actual, device/browser. Quote the source (e.g. feedback id + date)."}
+    validations: {required: true}
+  - type: textarea
+    id: acceptance
+    attributes: {label: Acceptance criteria, placeholder: "- [ ] ..."}
+    validations: {required: true}
+  - type: textarea
+    id: out_of_scope
+    attributes: {label: Out of scope}
