@@ -1,3 +1,90 @@
+Collaboration prompt version: 1.3 (2026-10-21)
+Last version check: 2026-10-21. COLLABORATION_VERSION was 1.3.
+
+Full protocol and latest version: see COLLABORATION.md in the private repo qiqstart/project-template.
+Checking for updates: at the start of a work session, if a day or more has passed since the last check, read only COLLABORATION_VERSION:
+  gh api repos/qiqstart/project-template/contents/COLLABORATION_VERSION -H "Accept: application/vnd.github.raw"
+Only if it is newer than the version on the first line, read COLLABORATION.md and apply the changes listed at its top. If you cannot check, keep using this version and say so in the PR.
+
+# AGENTS.md — how we track and ship work
+
+The repo is the single source of truth, so any agent on any platform can pick up work in parallel. Chats are not a tracker or an archive. For repository changes, the rules in this section win over the workspace notes further down.
+
+## Issues
+1. Every bug, feature request, feedback item, and follow-up becomes a GitHub issue in this repo. Don't keep task lists only in chat or memory.
+2. Issue format: Title; Goal; Details (quote the source, e.g. feedback id + date); Acceptance criteria; Out of scope.
+3. Labels: `bug`, `feature`, `in-progress` (create if missing), plus project labels as useful.
+4. Close duplicates with a link; ask the owner in the issue when something is unclear.
+5. When in-app feedback arrives (shared feedback service), turn new items into issues and note the feedback id.
+
+## Notes, proposals and designs
+1. Any design, proposal, research write-up, decision record or meeting note goes in the repo under `docs/`, not only in chat.
+2. File name: `docs/<topic>-YYYY-MM-DD.md`.
+3. First line is a status header: `Status: current as of YYYY-MM-DD` (or `Status: proposal`, `Status: accepted`).
+4. Never rewrite history: when advice changes, add a new dated file, and change the old file's first line to `Status: superseded by docs/<new-file>.md (YYYY-MM-DD)`.
+5. End with a `## Decisions` section recording the owner's choices with the date.
+6. Link the doc from the related issue or PR. Docs go in via PR like any other change.
+
+## Claiming (multi-agent)
+1. Before starting, comment `Claimed by <agent name>` and add `in-progress`. One agent per issue.
+2. Check open PRs touching the same files; coordinate in issue comments.
+3. If blocked or stopping, comment why and remove `in-progress`.
+
+## Pull requests
+1. Read README and AGENTS.md first; match existing patterns.
+2. Branch off latest main: `agent/<issue-number>-<short-name>`.
+3. Small, focused change (aim under ~300 lines). No drive-by refactors or dependency upgrades.
+4. Never push to main and never merge. Only the owner merges.
+5. Off limits unless the issue says so: auth, CI workflows, production env vars/secrets, DB migrations. Schema changes go in a new numbered migration and need the owner's explicit okay plus a backup before running in production.
+6. Never commit secrets or .env files, or paste them into chat.
+7. Rebase on main, run lint/typecheck/tests, add tests for the change.
+8. Address review with new commits; no force-push.
+9. Report the PR link and a 2–3 line summary to the owner.
+
+## PR format
+Title: `<type>: <short summary> (#<issue>)`, type one of feat, fix, docs, refactor, test, chore.
+
+Body (also `.github/pull_request_template.md`):
+
+## What
+<1-3 bullets of what changed>
+
+## Why
+Closes #<issue>.
+Collaboration version: <e.g. 1.3> <one line of context>
+
+## How tested
+- <commands run and results>
+- <devices/browsers checked>
+
+## Screenshots
+<before/after for any UI change, or "n/a">
+
+## Risks and follow-ups
+- <migrations, env vars, breaking changes, or "none">
+- <follow-up issues opened>
+
+## Checklist
+- [ ] Small and focused, branch agent/<issue>-<name>
+- [ ] Lint, typecheck and tests pass
+- [ ] No secrets, no migrations/auth/CI changes unless the issue asked
+- [ ] Collaboration version noted, and checked for a newer one before starting
+- [ ] Docs updated (docs/ dated file if a design changed)
+
+## Web apps: home screen icon and title
+- Every web app must look right when added to an iPhone home screen from Safari (Share > Add to Home Screen).
+- In the page <head>:
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png">   (180x180 PNG, square, no transparency)
+  <meta name="apple-mobile-web-app-title" content="<Short Name>">   (about 12 characters max)
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <link rel="manifest" href="/manifest.webmanifest">
+- manifest.webmanifest: name, short_name, display "standalone", start_url "/", background_color, theme_color, and icons at 192x192 and 512x512.
+- Put the icon files in the public folder so they're served from the site root.
+- Keep the existing platform `/__grok/` manifest and touch icon. Do not remove that branding.
+- Check it on an iPhone. The name stays editable in the add sheet, and an icon that was already added has to be removed and re-added to update.
+
+---
+
 # App Builder Workspace
 
 **The single source of truth** for the App Builder sandbox contract. You are
