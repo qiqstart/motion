@@ -1,4 +1,4 @@
-Collaboration prompt version: 1.12 (2026-10-24)
+Collaboration prompt version: 1.13 (2026-10-26)
 Last version check: 2026-10-21. COLLABORATION_VERSION was 1.3.
 
 Full protocol and latest version: see COLLABORATION.md in the private repo qiqstart/project-template.

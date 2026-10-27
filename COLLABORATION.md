@@ -1,6 +1,7 @@
-Collaboration prompt version: 1.12 (2026-10-24)
+Collaboration prompt version: 1.13 (2026-10-26)
 
 Changelog (newest first; if you're one version behind, read only the new lines):
+- 1.13: each repo keeps docs/progress-log.md (newest first); see "Progress log" below. scripts/push-protocol-update.sh creates a starter log if missing, never overwrites. ready-to-merge label: agents add it when a PR is finished and remove it on new changes or blockers; a signal, not permission to merge. PPU creates the label if missing.
 - 1.12: existing repos join the protocol only via scripts/push-protocol-update.sh --repo (dry run, then --apply), never by hand; script also detects unlabeled protocol PRs. New web apps via scripts/new-web-project.sh start on the protocol.
 - 1.11: protocol-update PRs are pushed to all repos by scripts/push-protocol-update.sh (run from project-template), not by bots.
 - 1.10: AGENTS.md carries a short core-rules summary so it works as a one-line entry point; new rules: prefer scripts/ over manual steps; repos not on the protocol copy files from project-template main via a protocol-update PR.
@@ -14,12 +15,22 @@ Changelog (newest first; if you're one version behind, read only the new lines):
 - 1.2: when to check for new versions; PRs record the protocol version.
 - 1.1: web apps: home screen icon and title.
 
-Apply: if your repo's AGENTS.md says "Collaboration prompt version: 1.12" or higher, skip. Else apply this and set that line at the top of AGENTS.md in a PR.
+Apply: if your repo's AGENTS.md says "Collaboration prompt version: 1.13" or higher, skip. Else apply this and set that line at the top of AGENTS.md in a PR.
 Updates: at session start, if a day or more since your last check, read only COLLABORATION_VERSION in private repo qiqstart/project-template:
   gh api repos/qiqstart/project-template/contents/COLLABORATION_VERSION -H "Accept: application/vnd.github.raw"
 If newer than your AGENTS.md, read this file and apply the changelog lines above yours. Every change bumps the version. Can't check (no access/offline)? Keep your version and say so in the PR.
 
 Glossary: PR = pull request. repo = repository. env = environment variables. prod = production. migr = DB migration. DNM = do not merge. WIP = work in progress. AC = acceptance criteria.
+
+Progress log
+Each repo keeps a running log at `docs/progress-log.md`, newest entry at the top.
+- Add an entry whenever you finish a meaningful step: a PR opened or merged, a decision made, a blocker hit or cleared, or a deploy.
+- Put each new entry directly under the title, above all older entries. Never edit or reorder past entries; add a correcting entry instead.
+- Entry format:
+  `### YYYY-MM-DD HH:MM (Asia/Jerusalem) · <agent name>`
+  then one to three lines covering what changed, links to the issue or PR, and what's next or who it's waiting on.
+- Keep entries short and factual. Longer designs belong in `docs/<topic>-YYYY-MM-DD.md` and project-wide decisions in `DECISIONS.md`; link to them from the log.
+- Read the top few entries before starting work, so you pick up where the last agent left off.
 
 Basics
 - GitHub is the source of truth, not chat. Any agent must be able to pick up work from the repo alone. Read README and AGENTS.md first.
@@ -47,6 +58,7 @@ Claiming
 
 PRs
 - Never push to main. Never merge. JTS merges.
+- PR finished (work complete, checks passing, no open questions)? Add the `ready-to-merge` label (create if missing) and log it in docs/progress-log.md. Remove it if you push more changes that need review or a blocker appears. Only JTS merges; the label is a signal, not permission.
 - Branch off latest main: agent/<issue-number>-<short-name>. Match existing patterns.
 - Small (under ~300 lines). No drive-by refactors or dependency upgrades.
 - Off limits unless the issue says so: auth, CI workflows, prod env/secrets, migr. Schema changes: new numbered migr, JTS's explicit okay, and a backup before running in prod.
