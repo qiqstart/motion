@@ -1,4 +1,5 @@
 import { createRootRoute, HeadContent, Outlet, Scripts } from "@tanstack/react-router";
+import { OfflineRegister } from "@/components/offline-register";
 import { FeedbackWidget } from "@/components/feedback-widget";
 import { AuthProvider } from "@/lib/auth/provider";
 import { PreviewHostBridge } from "@/components/preview-host-bridge";
@@ -38,6 +39,7 @@ export const Route = createRootRoute({
           <Outlet />
         </AuthProvider>
         <Scripts />
+        <OfflineRegister />
         <FeedbackWidget />
       </body>
     </html>
