@@ -1,5 +1,9 @@
 # Progress log
 
+### 2026-11-21 17:56 (Asia/Jerusalem) · Grok
+
+Opened the pull request for qiqstart/motion#15. MCP reads are plain text, tool errors stay in the tool result, and the tools are tested against a fake studio. JTS asked to merge without waiting.
+
 ### 2026-11-21 17:53 (Asia/Jerusalem) · Grok
 
 Opened the pull request for qiqstart/motion#13. Agents can use /api/mcp with the current session. JTS asked to merge without waiting.

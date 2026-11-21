@@ -1,8 +1,9 @@
 import { createMcpHandler } from "@modelcontextprotocol/server";
 import { createFileRoute } from "@tanstack/react-router";
 import { auth, authConfigured } from "@/lib/auth/server";
-import { DEV_USER_ID } from "@/lib/auth/verify.server";
+import { bearerToken, decideCaller } from "@/lib/mcp-auth";
 import { motionServer } from "@/lib/mcp.server";
+import { DEV_USER_ID } from "@/lib/auth/verify.server";
 
 const mcp = createMcpHandler(({ authInfo }) => motionServer(authInfo?.clientId ?? ""), { responseMode: "json" });
 
@@ -14,10 +15,14 @@ const CORS = {
 };
 
 async function callerId(request: Request): Promise<string | null> {
-  const database = Boolean(process.env.DATABASE_URL?.trim());
-  if (!authConfigured) return database ? null : DEV_USER_ID;
-  const session = await auth.api.getSession({ headers: request.headers });
-  return session?.user?.id ?? null;
+  const databaseConfigured = Boolean(process.env.DATABASE_URL?.trim());
+  const session = authConfigured ? await auth.api.getSession({ headers: request.headers }) : null;
+  return decideCaller({
+    authConfigured,
+    databaseConfigured,
+    sessionUserId: session?.user?.id ?? null,
+    devUserId: DEV_USER_ID,
+  });
 }
 
 function withCors(response: Response): Response {
@@ -36,9 +41,11 @@ async function respond(request: Request): Promise<Response> {
       }),
     );
   }
-  const header = request.headers.get("authorization") ?? "";
-  const token = header.toLowerCase().startsWith("bearer ") ? header.slice(7).trim() : "session";
-  return withCors(await mcp.fetch(request, { authInfo: { token, clientId: userId, scopes: ["pages"] } }));
+  return withCors(
+    await mcp.fetch(request, {
+      authInfo: { token: bearerToken(request.headers.get("authorization")), clientId: userId, scopes: ["pages"] },
+    }),
+  );
 }
 
 export const Route = createFileRoute("/api/mcp")({
