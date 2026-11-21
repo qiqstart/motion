@@ -1,5 +1,9 @@
 # Progress log
 
+### 2026-11-21 17:53 (Asia/Jerusalem) · Grok
+
+Opened the pull request for qiqstart/motion#13. Agents can use /api/mcp with the current session. JTS asked to merge without waiting.
+
 ### 2026-11-21 17:44 (Asia/Jerusalem) · Grok
 
 Opened the pull request for qiqstart/motion#11. Creating, deleting, moving, duplicating, and templates work offline and sync on reconnect. JTS asked to merge without waiting.

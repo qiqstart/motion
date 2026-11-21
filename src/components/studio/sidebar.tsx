@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { PageIcon } from "@/components/studio/icons";
 import { UserButton } from "@/lib/auth/gates";
+import { agentConnection } from "@/lib/mcp.functions";
 import { cn } from "@/lib/cn";
 import type { PageSummary } from "@/lib/pages";
 
@@ -242,6 +243,7 @@ export function Sidebar({
           <div className="motion-account mb-3 min-w-0 px-1">
             <UserButton />
           </div>
+          <AgentConfig />
           <div className="grid grid-cols-2 gap-1 rounded-md bg-walnut-2 p-1">
             <Link
               to="/"
@@ -309,5 +311,35 @@ function PageLink({
       <PageIcon name={page.icon} className={active ? "text-copper" : undefined} />
       <span className="truncate">{page.title}</span>
     </Link>
+  );
+}
+
+function AgentConfig() {
+  const [note, setNote] = useState("Copy agent config");
+  return (
+    <button
+      type="button"
+      className="mb-2 h-11 w-full rounded-md text-sm text-walnut-muted"
+      onClick={() => {
+        void agentConnection()
+          .then(async (result) => {
+            const config = {
+              mcpServers: {
+                motion: {
+                  url: `${window.location.origin}${result.path}`,
+                  headers: { Authorization: `Bearer ${result.token}` },
+                },
+              },
+            };
+            await navigator.clipboard.writeText(JSON.stringify(config, null, 2));
+            setNote("Copied");
+          })
+          .catch((caught: unknown) => {
+            setNote(caught instanceof Error ? caught.message : "Couldn't copy");
+          });
+      }}
+    >
+      {note}
+    </button>
   );
 }
