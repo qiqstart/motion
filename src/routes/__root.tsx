@@ -13,6 +13,8 @@ export const Route = createRootRoute({
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1, interactive-widget=resizes-content" },
       { title: APP_NAME },
+      { name: "apple-mobile-web-app-title", content: "Motion" },
+      { name: "apple-mobile-web-app-capable", content: "yes" },
       { name: "theme-color", content: "#1a1613" },
     ],
     links: [
@@ -24,6 +26,8 @@ export const Route = createRootRoute({
         href: "https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400&family=Outfit:wght@400;500;600&display=swap",
       },
       { rel: "stylesheet", href: appCss },
+      { rel: "manifest", href: "/manifest.webmanifest" },
+      { rel: "apple-touch-icon", href: "/apple-touch-icon.png" },
       { rel: "manifest", href: "/__grok/manifest.webmanifest" },
       { rel: "apple-touch-icon", href: "/__grok/icon-180.png" },
     ],
