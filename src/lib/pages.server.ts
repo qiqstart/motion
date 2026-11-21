@@ -119,7 +119,7 @@ async function refreshSearch(userId: string, id: string) {
 
 export async function createPageRow(
   userId: string,
-  input: { title?: string; parentId?: string | null; icon?: string; status?: string },
+  input: { id?: string; title?: string; parentId?: string | null; icon?: string; status?: string; template?: boolean },
 ): Promise<{ id: string; title: string }> {
   const parentId = input.parentId ?? null;
   if (parentId && !isId(parentId)) throw new Error("Unknown page");
@@ -127,20 +127,27 @@ export async function createPageRow(
   const title = (input.title ?? "Untitled").trim().slice(0, 180) || "Untitled";
   const icon = input.icon && isIcon(input.icon) ? input.icon : "file-text";
   const status = input.status && isStatus(input.status) ? input.status : "draft";
-  const id = crypto.randomUUID();
+  const requested = input.id && isId(input.id) ? input.id : crypto.randomUUID();
+  const sql = await getSql();
+  const existing = await sql<{ id: string; user_id: string; title: string }>`
+    select id, user_id, title from pages where id = ${requested}
+  `;
+  if (existing[0]) {
+    if (existing[0].user_id !== userId) throw new Error("Unknown page");
+    return { id: existing[0].id, title: existing[0].title };
+  }
   const position = await nextPosition(userId, parentId);
   const search = searchPlain(title, [], []);
-  const sql = await getSql();
   await sql`
     insert into pages (
       id, user_id, parent_id, title, icon, cover, favorite, position, status, is_template, content, properties, search_text
     )
     values (
-      ${id}, ${userId}, ${parentId}, ${title}, ${icon}, ${"none"}, false, ${position}, ${status}, false,
+      ${requested}, ${userId}, ${parentId}, ${title}, ${icon}, ${"none"}, false, ${position}, ${status}, ${input.template === true},
       ${"[]"}::jsonb, ${"[]"}::jsonb, ${search}
     )
   `;
-  return { id, title };
+  return { id: requested, title };
 }
 
 async function parentChainCycles(userId: string, id: string, parentId: string | null): Promise<boolean> {

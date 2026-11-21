@@ -3,8 +3,12 @@ import { describe, it } from "node:test";
 import {
   applyDetail,
   applyPatchToStudio,
+  createLocal,
+  deleteLocal,
   isOfflineError,
   mergePatch,
+  moveLocal,
+  planSync,
   remember,
   studioFromSnapshot,
   type Snapshot,
@@ -73,5 +77,31 @@ describe("offline snapshots", () => {
     const view = studioFromSnapshot(snapshot, "page-1");
     assert.equal(view.page?.title, "Field notes");
     assert.equal(view.page?.content, "[]");
+  });
+
+  it("keeps a page created offline and skips it after it is deleted locally", () => {
+    const saved = remember(null, studio(), NOW);
+    const created = createLocal(saved, { id: "page-2", parentId: "page-1", title: "Pack list" }, NOW);
+    const folded = remember(created, studio(), NOW);
+    assert.equal(folded.pages.some((page) => page.id === "page-2"), true);
+    assert.equal(planSync(created)[0]?.kind, "create");
+    const removed = deleteLocal(created, "page-2");
+    assert.equal(removed.snapshot.pages.some((page) => page.id === "page-2"), false);
+    assert.equal(removed.snapshot.ops.some((op) => op.kind === "create"), false);
+    assert.equal(removed.snapshot.ops.some((op) => op.kind === "delete"), false);
+  });
+
+  it("queues a delete for a server page and a move for a reorder", () => {
+    const saved = remember(null, studio(), NOW);
+    const child = createLocal(saved, { id: "page-2", parentId: null, title: "Notes" }, NOW);
+    const removed = deleteLocal(child, "page-1");
+    assert.equal(removed.snapshot.ops.some((op) => op.kind === "delete" && op.id === "page-1"), true);
+    assert.equal(removed.snapshot.pages.some((page) => page.id === "page-1"), false);
+    const moved = moveLocal(child, "page-2", "page-1", 0);
+    assert.equal(moved.pages.find((page) => page.id === "page-2")?.parentId, "page-1");
+    assert.equal(planSync(moved).some((item) => item.kind === "move"), true);
+    const nested = deleteLocal(moved, "page-1");
+    assert.equal(nested.snapshot.pages.some((page) => page.id === "page-2"), false);
+    assert.equal(nested.snapshot.ops.some((op) => op.kind === "delete" && op.id === "page-1"), true);
   });
 });

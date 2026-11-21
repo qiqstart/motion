@@ -1,5 +1,9 @@
 # Progress log
 
+### 2026-11-21 17:44 (Asia/Jerusalem) · Grok
+
+Opened the pull request for qiqstart/motion#11. Creating, deleting, moving, duplicating, and templates work offline and sync on reconnect. JTS asked to merge without waiting.
+
 ### 2026-11-21 15:19 (Asia/Jerusalem) · Grok
 
 Opened https://github.com/qiqstart/motion/pull/10 for qiqstart/motion#2. Home screen name and icon are ready for review. Waiting on JTS to merge.
