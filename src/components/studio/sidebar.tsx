@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { PageIcon } from "@/components/studio/icons";
 import { UserButton } from "@/lib/auth/gates";
+import { agentConfig } from "@/lib/mcp-auth";
 import { agentConnection } from "@/lib/mcp.functions";
 import { cn } from "@/lib/cn";
 import type { PageSummary } from "@/lib/pages";
@@ -323,15 +324,9 @@ function AgentConfig() {
       onClick={() => {
         void agentConnection()
           .then(async (result) => {
-            const config = {
-              mcpServers: {
-                motion: {
-                  url: `${window.location.origin}${result.path}`,
-                  headers: { Authorization: `Bearer ${result.token}` },
-                },
-              },
-            };
-            await navigator.clipboard.writeText(JSON.stringify(config, null, 2));
+            await navigator.clipboard.writeText(
+              JSON.stringify(agentConfig(window.location.origin, result.path, result.token), null, 2),
+            );
             setNote("Copied");
           })
           .catch((caught: unknown) => {
