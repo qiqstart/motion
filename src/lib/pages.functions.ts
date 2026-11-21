@@ -40,17 +40,19 @@ export const loadStudio = createServerFn({ method: "GET" })
 
 export const createPage = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
-  .validator((data: { title?: string; parentId?: string | null; icon?: string; status?: string }) => {
+  .validator((data: { id?: string; title?: string; parentId?: string | null; icon?: string; status?: string; template?: boolean }) => {
     const body = readObject(data);
     const parentId = body.parentId;
     if (parentId !== undefined && parentId !== null && typeof parentId !== "string") {
       throw new Error("Unknown page");
     }
     return {
+      id: typeof body.id === "string" && isId(body.id) ? body.id : undefined,
       title: typeof body.title === "string" ? body.title : undefined,
       parentId: typeof parentId === "string" ? parentId : null,
       icon: typeof body.icon === "string" ? body.icon : undefined,
       status: typeof body.status === "string" ? body.status : undefined,
+      template: body.template === true,
     };
   })
   .handler(async ({ data, context }) => createPageRow(context.userId, data));

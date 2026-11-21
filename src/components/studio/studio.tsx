@@ -9,12 +9,17 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/cn";
 import {
   applyPatchToStudio,
+  dropOp,
   dropPending,
   isOfflineError,
-  pendingPatches,
+  mergedStudio,
+  queueCopy,
+  queueCreate,
+  queueDelete,
+  queueMove,
   queuePatch,
-  readStudio,
   rememberStudio,
+  syncItems,
 } from "@/lib/offline";
 import { createFromTemplate, createPage, deletePage, duplicatePage, movePage, saveTemplate, updatePage } from "@/lib/pages.functions";
 import { isDescendant, paragraphsFromText, type PagePatch, type StudioData } from "@/lib/pages";
@@ -72,13 +77,9 @@ export function Studio({ data, view }: { data: StudioData & { offline?: boolean 
     let stopped = false;
     void (async () => {
       if (data.offline) return;
-      const cached = await readStudio(data.page?.id ?? null);
-      if (stopped || !cached) return;
-      const pending = await pendingPatches();
-      if (stopped || pending.length === 0) return;
-      let next = { pages: data.pages, page: data.page };
-      for (const item of pending) next = applyPatchToStudio(next, item.id, item.patch);
-      setOverlay(next);
+      const merged = await mergedStudio({ pages: data.pages, page: data.page });
+      if (stopped || !merged) return;
+      setOverlay(merged);
     })();
     return () => {
       stopped = true;
@@ -96,16 +97,41 @@ export function Studio({ data, view }: { data: StudioData & { offline?: boolean 
       if (typeof navigator !== "undefined" && navigator.onLine === false) return;
       try {
         let sent = false;
-        for (let pass = 0; pass < 4; pass += 1) {
-          const queued = await pendingPatches();
+        for (let pass = 0; pass < 6; pass += 1) {
+          const queued = await syncItems();
           if (stopped || queued.length === 0) break;
           for (const item of queued) {
-            await updatePage({ data: { id: item.id, ...item.patch } });
-            await dropPending(item.id, item.rev);
+            if (item.kind === "create") {
+              await createPage({
+                data: {
+                  id: item.id,
+                  parentId: item.parentId,
+                  title: item.title,
+                  icon: item.icon,
+                  status: item.status,
+                  template: item.template,
+                },
+              });
+              if (item.patch) await updatePage({ data: { id: item.id, ...item.patch } });
+              await dropOp(item.rev);
+            } else if (item.kind === "move") {
+              await movePage({ data: { id: item.id, parentId: item.parentId, index: item.index } });
+              await dropOp(item.rev);
+            } else if (item.kind === "delete") {
+              try {
+                await deletePage({ data: { id: item.id } });
+              } catch (caught) {
+                if (!(caught instanceof Error) || !caught.message.includes("gone")) throw caught;
+              }
+              await dropOp(item.rev);
+            } else {
+              await updatePage({ data: { id: item.id, ...item.patch } });
+              await dropPending(item.id, item.rev);
+            }
             sent = true;
           }
         }
-        if (!stopped && sent && (await pendingPatches()).length === 0) await router.invalidate();
+        if (!stopped && sent && (await syncItems()).length === 0) await router.invalidate();
       } catch (caught) {
         if (!stopped && isOfflineError(caught)) setOffline(true);
       }
@@ -120,7 +146,18 @@ export function Studio({ data, view }: { data: StudioData & { offline?: boolean 
 
   function offlineMessage() {
     setOffline(true);
-    setError("You're offline. Creating, moving, and deleting pages needs a connection.");
+    setError("You're offline.");
+  }
+
+  async function onlineOr<T>(task: () => Promise<T>, fallback: () => Promise<T>): Promise<T> {
+    try {
+      return await task();
+    } catch (caught) {
+      if (!isOfflineError(caught)) throw caught;
+      setOffline(true);
+      setError(null);
+      return fallback();
+    }
   }
 
   async function run(task: () => Promise<void>) {
@@ -143,7 +180,14 @@ export function Studio({ data, view }: { data: StudioData & { offline?: boolean 
 
   function makePage(parentId?: string | null) {
     void run(async () => {
-      const created = await createPage({ data: { parentId: parentId ?? null } });
+      const created = await onlineOr(
+        () => createPage({ data: { parentId: parentId ?? null } }),
+        async () => {
+          const saved = await queueCreate(shown, { parentId: parentId ?? null, title: "Untitled" });
+          setOverlay(saved.studio);
+          return saved;
+        },
+      );
       setNavOpen(false);
       await navigate({ to: "/", search: { page: created.id, view: "page" } });
     });
@@ -162,16 +206,34 @@ export function Studio({ data, view }: { data: StudioData & { offline?: boolean 
         ? siblings.length
         : Math.max(0, siblings.findIndex((page) => page.id === target.id) + (place === "after" ? 1 : 0));
     void run(async () => {
-      await movePage({ data: { id, parentId, index } });
-      await router.invalidate();
+      await onlineOr(
+        async () => {
+          await movePage({ data: { id, parentId, index } });
+          await router.invalidate();
+        },
+        async () => {
+          setOverlay(await queueMove(shown, id, parentId, index));
+        },
+      );
     });
   }
 
   async function createInline() {
-    if (!shown.page) return { id: "", title: "Untitled" };
+    const parentId = shown.page?.id;
+    if (!parentId) return { id: "", title: "Untitled" };
     try {
-      const created = await createPage({ data: { parentId: shown.page.id, title: "Untitled" } });
-      await router.invalidate();
+      const created = await onlineOr(
+        async () => {
+          const page = await createPage({ data: { parentId, title: "Untitled" } });
+          await router.invalidate();
+          return page;
+        },
+        async () => {
+          const saved = await queueCreate(shown, { parentId: shown.page?.id ?? null, title: "Untitled" });
+          setOverlay(saved.studio);
+          return saved;
+        },
+      );
       return created;
     } catch (caught) {
       if (isOfflineError(caught)) offlineMessage();
@@ -183,9 +245,18 @@ export function Studio({ data, view }: { data: StudioData & { offline?: boolean 
   async function draftSubpage(title: string, text: string) {
     if (!shown.page) return;
     await run(async () => {
-      const created = await createPage({ data: { parentId: shown.page?.id ?? null, title } });
-      const content = paragraphsFromText(text);
-      if (content.length) await updatePage({ data: { id: created.id, content } });
+      const blocks = paragraphsFromText(text);
+      let stored = false;
+      const created = await onlineOr(
+        () => createPage({ data: { parentId: shown.page?.id ?? null, title } }),
+        async () => {
+          stored = true;
+          const saved = await queueCreate(shown, { parentId: shown.page?.id ?? null, title, content: blocks });
+          setOverlay(saved.studio);
+          return saved;
+        },
+      );
+      if (!stored && blocks.length) await patch(created.id, { content: blocks });
       await navigate({ to: "/", search: { page: created.id, view: "page" } });
     });
   }
@@ -215,7 +286,14 @@ export function Studio({ data, view }: { data: StudioData & { offline?: boolean 
         onMove={relocate}
         onUseTemplate={(id) => {
           void run(async () => {
-            const created = await createFromTemplate({ data: { id, parentId: null } });
+            const created = await onlineOr(
+              () => createFromTemplate({ data: { id, parentId: null } }),
+              async () => {
+                const saved = await queueCopy(shown, id, "from-template");
+                setOverlay(saved.studio);
+                return saved;
+              },
+            );
             setNavOpen(false);
             await navigate({ to: "/", search: { page: created.id, view: "page" } });
           });
@@ -240,7 +318,7 @@ export function Studio({ data, view }: { data: StudioData & { offline?: boolean 
         <div ref={scroller} className="min-h-0 flex-1 overflow-y-auto">
           {offline ? (
             <p className="border-b border-line bg-copper-soft px-4 py-2 text-sm text-ink">
-              Offline. Pages already on this device stay editable. New pages need a connection, and edits sync when you reconnect.
+              Offline. Changes stay on this device and sync when you reconnect.
             </p>
           ) : null}
           {error ? (
@@ -273,7 +351,14 @@ export function Studio({ data, view }: { data: StudioData & { offline?: boolean 
                 const id = shown.page?.id;
                 if (!id) return;
                 void run(async () => {
-                  const copy = await duplicatePage({ data: { id } });
+                  const copy = await onlineOr(
+                    () => duplicatePage({ data: { id } }),
+                    async () => {
+                      const saved = await queueCopy(shown, id, "copy");
+                      setOverlay(saved.studio);
+                      return saved;
+                    },
+                  );
                   await navigate({ to: "/", search: { page: copy.id, view: "page" } });
                 });
               }}
@@ -281,15 +366,30 @@ export function Studio({ data, view }: { data: StudioData & { offline?: boolean 
                 const id = shown.page?.id;
                 if (!id) return;
                 void run(async () => {
-                  await saveTemplate({ data: { id } });
-                  await router.invalidate();
+                  await onlineOr(
+                    async () => {
+                      await saveTemplate({ data: { id } });
+                      await router.invalidate();
+                    },
+                    async () => {
+                      const saved = await queueCopy(shown, id, "template");
+                      setOverlay(saved.studio);
+                    },
+                  );
                 });
               }}
               onUseTemplate={() => {
                 const id = shown.page?.id;
                 if (!id) return;
                 void run(async () => {
-                  const created = await createFromTemplate({ data: { id, parentId: null } });
+                  const created = await onlineOr(
+                    () => createFromTemplate({ data: { id, parentId: null } }),
+                    async () => {
+                      const saved = await queueCopy(shown, id, "from-template");
+                      setOverlay(saved.studio);
+                      return saved;
+                    },
+                  );
                   await navigate({ to: "/", search: { page: created.id, view: "page" } });
                 });
               }}
@@ -298,10 +398,16 @@ export function Studio({ data, view }: { data: StudioData & { offline?: boolean 
                 const id = shown.page?.id;
                 if (!id) return;
                 void run(async () => {
-                  const result = await deletePage({ data: { id } });
+                  const result = await onlineOr(
+                    () => deletePage({ data: { id } }),
+                    async () => {
+                      const saved = await queueDelete(shown, id);
+                      setOverlay(saved.studio);
+                      return { parentId: saved.parentId };
+                    },
+                  );
                   const fallback =
-                    result.parentId ??
-                    shown.pages.find((page) => page.id !== id && page.parentId === null)?.id;
+                    result.parentId ?? shown.pages.find((page) => page.id !== id && page.parentId === null)?.id;
                   if (fallback) await navigate({ to: "/", search: { page: fallback, view: "page" } });
                   else await navigate({ to: "/", search: { page: undefined, view: "page" } });
                 });
